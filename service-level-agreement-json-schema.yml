@@ -1,0 +1,235 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://raw.githubusercontent.com/api-commons/service-level-agreement/main/service-level-agreement-json-schema.yml
+title: API Commons Service Level Agreement (SLA4OAI profile)
+description: >-
+  A profile of SLA4OAI 1.0.0 Draft (https://github.com/isa-group/SLA4OAI-Specification), not a new
+  format. It constrains the parts APIs.io emits and documents the x-apis-io-* extensions that carry
+  what SLA4OAI has no field for: an uptime promise, a service credit, a response time, what a status
+  page reports, and account-wide limits with no path. Every guarantee and observed row is quoted from
+  the provider's own SLA or status page. Upstream SLA4OAI fields (rates, quotas, pricing, metrics)
+  are allowed and are validated by the upstream schema, not this one.
+oneOf:
+  - title: SLA4OAI document
+    description: A conformant SLA4OAI document, as written to all/<slug>/sla/<slug>-sla.yml.
+    type: object
+    $ref: '#/$defs/sla4oai'
+  - title: Service levels (non-conformant)
+    description: >-
+      Written as all/<slug>/sla/<slug>-service-levels.yml when a figure was found but the provider
+      publishes no OpenAPI, which SLA4OAI requires (context.api). It says so in `conformant: false`.
+    type: object
+    $ref: '#/$defs/serviceLevels'
+  - title: ServiceLevelAgreement properties
+    description: One or more apis.yml property envelopes carrying the document under `data`.
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/property'
+
+$defs:
+
+  property:
+    type: object
+    additionalProperties: false
+    required: [type, url]
+    properties:
+      name:
+        type: string
+        description: The name of the property as it appears in the index.
+      type:
+        const: ServiceLevelAgreement
+        description: The API Commons property type. Always ServiceLevelAgreement.
+      description:
+        type: string
+      url:
+        type: string
+        format: uri-reference
+        description: The artifact path (sla/<slug>-sla.yml) or the provider's SLA page.
+      source_date:
+        type: string
+        format: date
+        description: When the figures were last read from the provider's pages.
+      data:
+        description: The document itself, inline.
+        anyOf:
+          - $ref: '#/$defs/sla4oai'
+          - $ref: '#/$defs/serviceLevels'
+
+  sla4oai:
+    type: object
+    required: [sla4oas, context, plans]
+    description: An SLA4OAI 1.0.0 Draft document. Only the parts APIs.io emits are constrained here.
+    properties:
+      sla4oas:
+        const: 1.0.0
+        description: The SLA4OAI version. Always 1.0.0.
+      context:
+        type: object
+        required: [id, type, provider, api, x-apis-io-derivation]
+        properties:
+          id:
+            type: string
+            description: '`<slug>-plans`.'
+          type:
+            const: plans
+            description: SLA4OAI context type. APIs.io emits plans documents.
+          provider:
+            type: string
+            description: The provider's name.
+          api:
+            type: object
+            required: [$ref]
+            description: The OpenAPI the SLA applies to (SLA4OAI requires one).
+            properties:
+              $ref:
+                type: string
+          x-apis-io-derivation:
+            $ref: '#/$defs/derivation'
+      metrics:
+        type: object
+        description: SLA4OAI metrics. APIs.io declares `requests`.
+      plans:
+        type: object
+        minProperties: 1
+        description: SLA4OAI plans keyed by plan slug. `base` holds rows that name no plan.
+        additionalProperties:
+          $ref: '#/$defs/plan'
+
+  serviceLevels:
+    type: object
+    additionalProperties: false
+    required: [name, conformant, not_sla4oai_because, provider, derivation, plans]
+    properties:
+      name:
+        type: string
+        description: '"<Provider> service levels".'
+      conformant:
+        const: false
+        description: Always false. This form is NOT an SLA4OAI document and says so.
+      not_sla4oai_because:
+        type: string
+        description: Why not, e.g. "The provider has no OpenAPI, which SLA4OAI requires."
+      provider:
+        type: string
+      derivation:
+        $ref: '#/$defs/derivation'
+      plans:
+        type: object
+        minProperties: 1
+        additionalProperties:
+          $ref: '#/$defs/plan'
+
+  plan:
+    type: object
+    description: >-
+      An SLA4OAI plan. Upstream keys (pricing, rates, quotas, availability) pass through; the
+      x-apis-io-* keys below are the profile's extensions.
+    properties:
+      x-apis-io-guarantees:
+        type: array
+        description: What the provider PROMISES, quoted from its SLA page.
+        items:
+          $ref: '#/$defs/levelRow'
+      x-apis-io-observed:
+        type: array
+        description: >-
+          What the provider REPORTS it delivered, quoted from its own status page. Never a promise,
+          and never measured by APIs.io.
+        items:
+          $ref: '#/$defs/levelRow'
+      x-apis-io-limits:
+        type: array
+        description: Limits as documented, verbatim, that name no method and path and so cannot sit in SLA4OAI `rates`.
+        items:
+          $ref: '#/$defs/limitRow'
+
+  levelRow:
+    type: object
+    additionalProperties: false
+    required: [text, source, read]
+    properties:
+      text:
+        type: string
+        minLength: 1
+        description: The figure, verbatim from the page (e.g. "99.9% Uptime Guarantee").
+      percent:
+        type: number
+        minimum: 0
+        maximum: 100
+        description: The percentage stated in `text`, when it states one.
+      window:
+        type: string
+        description: The measurement window, copied as written ("monthly", "Last 30 days").
+      component:
+        type: string
+        description: The component the figure applies to, as named on a status page.
+      credits_text:
+        type: string
+        description: The service-credit clause, verbatim.
+      response_time_text:
+        type: string
+        description: A support or incident response time, verbatim.
+      source:
+        type: string
+        format: uri
+        description: The page the row was read from.
+      read:
+        type: string
+        format: date
+        description: When it was read.
+
+  limitRow:
+    type: object
+    additionalProperties: false
+    required: [limit_text]
+    properties:
+      limit_text:
+        type: string
+        description: The limit, verbatim.
+      limit:
+        type: number
+      window:
+        type: string
+      scope:
+        type: string
+      endpoint:
+        type: string
+
+  derivation:
+    type: object
+    additionalProperties: false
+    required: [synthetic, method, read, tool, coverage, statement]
+    properties:
+      synthetic:
+        const: false
+        description: >-
+          Always false. A synthetic SLA reads as one the provider published whatever it says inside,
+          so build-sla4oai.py never writes one (Kin, 2026-11-07).
+      method:
+        const: searched
+        description: The figures were found on the provider's own SLA / status pages.
+      read:
+        type: string
+        format: date
+      tool:
+        type: string
+        description: engine/economics/build-sla4oai.py
+      coverage:
+        type: object
+        additionalProperties: false
+        required: [promised_uptime, reported_uptime]
+        properties:
+          promised_uptime:
+            enum: [found, not found, not checked]
+            description: Whether an uptime promise was found on an SLA page.
+          reported_uptime:
+            enum: [found, not found, not checked]
+            description: Whether a reported uptime was found on a status page.
+      statement:
+        type: string
+        description: The plain-language statement of what the figures are and are not.
+      sources:
+        type: array
+        items:
+          type: string
+          format: uri
